@@ -92,10 +92,38 @@ body{display:flex;justify-content:center;align-items:center;overflow:hidden;
 
 /* ── JANELA APP ── */
 .win{position:absolute;z-index:30;overflow:hidden;background:#f2f2f7;color:#111;
-  transition:left .4s cubic-bezier(.3,.7,.2,1),top .4s cubic-bezier(.3,.7,.2,1),
-    width .4s cubic-bezier(.3,.7,.2,1),height .4s cubic-bezier(.3,.7,.2,1),border-radius .4s}
+  transition:left .45s cubic-bezier(.32,.72,0,1),top .45s cubic-bezier(.32,.72,0,1),
+    width .45s cubic-bezier(.32,.72,0,1),height .45s cubic-bezier(.32,.72,0,1),
+    border-radius .45s,transform .3s cubic-bezier(.32,.72,0,1),opacity .3s}
 .win .in{position:absolute;inset:0;opacity:0;transition:opacity .2s;display:flex;flex-direction:column}
 .win.full .in{opacity:1;transition:opacity .3s .15s}
+
+/* ── APP SWITCHER ── */
+.switcher{position:absolute;inset:0;z-index:40;overflow:hidden;
+  background:rgba(0,0,0,.6);
+  -webkit-backdrop-filter:blur(30px) saturate(140%);
+  backdrop-filter:blur(30px) saturate(140%);
+  opacity:0;pointer-events:none;transition:opacity .3s}
+.switcher.show{opacity:1;pointer-events:auto}
+.sw-label{position:absolute;top:56px;left:0;right:0;text-align:center;
+  font-size:13px;font-weight:600;color:rgba(255,255,255,.5);letter-spacing:.5px}
+.sw-cards{position:absolute;top:80px;bottom:80px;left:0;right:0;
+  display:flex;align-items:center;gap:16px;padding:0 40px;
+  overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none}
+.sw-cards::-webkit-scrollbar{display:none}
+.sw-card{flex:none;width:200px;height:360px;border-radius:22px;overflow:hidden;
+  scroll-snap-align:center;position:relative;
+  box-shadow:0 12px 40px rgba(0,0,0,.5);cursor:pointer;
+  transition:transform .2s;transform:scale(.96)}
+.sw-card:hover{transform:scale(1)}
+.sw-card-label{position:absolute;bottom:10px;left:0;right:0;text-align:center;
+  font-size:13px;font-weight:600;color:#fff;
+  text-shadow:0 1px 6px rgba(0,0,0,.6)}
+.sw-card-close{position:absolute;top:8px;right:8px;width:24px;height:24px;
+  border-radius:50%;background:rgba(0,0,0,.55);border:none;color:#fff;
+  font-size:12px;cursor:pointer;display:grid;place-items:center;z-index:5}
+.sw-empty{color:rgba(255,255,255,.4);font-size:15px;text-align:center;
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
 
 /* ── APP MENSAGENS ── */
 .msg-header{height:88px;background:#fff;border-bottom:1px solid #e5e5ea;
@@ -359,9 +387,14 @@ body{display:flex;justify-content:center;align-items:center;overflow:hidden;
     </div>
 
     <div class="hi" id="hi"></div>
+    <!-- APP SWITCHER -->
+    <div class="switcher" id="switcher" style="display:none">
+      <div class="sw-label">Apps Recentes</div>
+      <div class="sw-cards" id="swCards"></div>
+    </div>
   </div>
 </div>
-<div class="versao">v4</div>
+<div class="versao">v5</div>
 </body>
 </html>
 <script>
@@ -458,8 +491,10 @@ function abrirApp(a, el){
   const w=document.createElement("div"); w.className="win"; w._el=el; w.style.cssText=boxOf(el);
   const cor=a[2].split(",")[1];
   const hdCor=(cor==="#f2f2f2"||cor==="#ececf0"||cor==="#f5e6ea")?"#ff3b30":cor;
-  w.innerHTML=`<div class="in"><div class="hd" style="background:${hdCor};height:150px;padding:62px 24px 0;color:#fff;font-size:34px;font-weight:700">${a[0]}</div><div class="bd" style="padding:24px;font-size:16px;color:#555;line-height:1.5"><div style="font-size:64px;margin-bottom:8px">${a[1]||"📅"}</div>${a[0]}: em construção.<br>Deslize para cima para voltar.</div></div>`;
+  w.innerHTML=`<div class="in"><div class="hd" style="background:${hdCor};height:150px;padding:62px 24px 0;color:#fff;font-size:34px;font-weight:700">${a[0]}</div><div class="bd" style="padding:24px;font-size:16px;color:#555;line-height:1.5"><div style="font-size:64px;margin-bottom:8px">${a[1]||"\uD83D\uDCC5"}</div>${a[0]}: em constru\u00e7\u00e3o.<br>Deslize para cima para voltar.</div></div>`;
   S.append(w); S.classList.add("inapp"); $("hi").classList.add("dk");
+  appsAbertos=appsAbertos.filter(x=>x.nome!==a[0]);
+  appsAbertos.unshift({nome:a[0], icone:a[1]||"\uD83D\uDCC5", cor:hdCor});
   void w.offsetWidth; w.classList.add("full"); w.style.cssText="left:0;top:0;width:100%;height:100%;border-radius:0";
 }
 
@@ -469,6 +504,8 @@ function abrirMensagens(){
   const w=$("winMsg"); w._el=document.querySelector('.dock .app-icon:nth-child(3) i');
   w.style.cssText=boxOf(w._el);
   S.append(w); S.classList.add("inapp"); $("hi").classList.add("dk");
+  appsAbertos=appsAbertos.filter(x=>x.nome!=="Mensagens");
+  appsAbertos.unshift({nome:"Mensagens", icone:"\uD83D\uDCAC", cor:"#1fb844"});
   renderContatos();
   void w.offsetWidth; w.classList.add("full"); w.style.cssText="left:0;top:0;width:100%;height:100%;border-radius:0";
 }
@@ -791,10 +828,70 @@ function bloquear(){
   S.classList.remove("unlocked","inapp"); $("hi").classList.remove("dk"); tick();
 }
 
-$("hi").onclick=cima; $("pw").onclick=bloquear;
-let y0=null;
-S.addEventListener("pointerdown",e=>y0=e.clientY);
-addEventListener("pointerup",e=>{ if(y0!==null&&(y0-e.clientY)/k()>60) cima(); y0=null; });
+$("pw").onclick=bloquear;
+
+// ── APPS ABERTOS ──
+let appsAbertos=[];
+
+// ── APP SWITCHER ──
+function mostrarSwitcher(){
+  const sw=$("switcher"); sw.style.display="";
+  const cards=$("swCards"); cards.innerHTML="";
+  if(appsAbertos.length===0){
+    cards.innerHTML=`<div class="sw-empty">Nenhum app aberto</div>`;
+  } else {
+    appsAbertos.forEach((ap,i)=>{
+      const card=document.createElement("div"); card.className="sw-card";
+      card.innerHTML=`
+        <div style="width:100%;height:100%;background:linear-gradient(160deg,${ap.cor}22,#f2f2f7);display:flex;flex-direction:column">
+          <div style="height:44px;background:rgba(0,0,0,.05);display:flex;align-items:center;padding:0 12px;font-size:13px;font-weight:600;color:#333">${ap.nome}</div>
+          <div style="flex:1;display:grid;place-items:center;font-size:64px">${ap.icone}</div>
+        </div>
+        <div class="sw-card-label">${ap.nome}</div>
+        <button class="sw-card-close">✕</button>`;
+      card.onclick=()=>{ esconderSwitcher(); if(ap.nome==="Mensagens") abrirMensagens(); };
+      card.querySelector(".sw-card-close").onclick=e=>{
+        e.stopPropagation();
+        appsAbertos.splice(i,1);
+        card.style.transition="transform .2s,opacity .2s";
+        card.style.transform="scale(0) translateY(30px)";
+        card.style.opacity="0";
+        setTimeout(()=>{ card.remove(); if(!cards.children.length) cards.innerHTML=`<div class="sw-empty">Nenhum app aberto</div>`; },200);
+      };
+      cards.append(card);
+    });
+  }
+  requestAnimationFrame(()=>sw.classList.add("show"));
+}
+
+function esconderSwitcher(){
+  const sw=$("switcher"); if(!sw) return;
+  sw.classList.remove("show");
+  setTimeout(()=>sw.style.display="none",320);
+}
+
+// ── GESTOS HOME INDICATOR ──
+let gy0=null, gyMov=false, swShown=false;
+
+$("hi").addEventListener("pointerdown",e=>{ gy0=e.clientY; gyMov=false; swShown=false; e.stopPropagation(); });
+$("hi").addEventListener("pointermove",e=>{
+  if(gy0===null) return;
+  const dy=gy0-e.clientY;
+  if(dy>8) gyMov=true;
+  if(dy>50 && !swShown && S.classList.contains("inapp")){
+    swShown=true; mostrarSwitcher();
+  }
+});
+$("hi").addEventListener("pointerup",e=>{
+  if(gy0===null) return;
+  const dy=gy0-e.clientY;
+  if(!gyMov) cima();
+  else if(dy>=120){ esconderSwitcher(); cima(); }
+  gy0=null;
+});
+
+// fechar switcher clicando fora
+$("switcher").addEventListener("pointerdown",e=>{ if(e.target===$("switcher")) esconderSwitcher(); });
 
 function ajustar(){ $("dv").style.transform="scale("+Math.min(1,(innerHeight-24)/872,(innerWidth-24)/418)+")"; }
 ajustar(); addEventListener("resize",ajustar);
