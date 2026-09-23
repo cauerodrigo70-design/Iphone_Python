@@ -79,9 +79,17 @@ async def ws_handler(ws: WebSocketServerProtocol):
                 h = historico(m["eu"], m["outro"])
                 await ws.send(json.dumps({"tipo": "historico", "msgs": h}))
 
+            elif t == "digitando":
+                dest = m.get("para")
+                if dest and dest in clientes:
+                    await clientes[dest].send(json.dumps({"tipo": "digitando", "de": m["de"], "ativo": m["ativo"]}))
+
             elif t == "mensagem":
                 de, para, texto, ts = m["de"], m["para"], m["texto"], m["ts"]
                 salvar_msg(de, para, texto, ts)
+                # avisar que parou de digitar
+                if para in clientes:
+                    await clientes[para].send(json.dumps({"tipo": "digitando", "de": de, "ativo": False}))
                 payload = json.dumps({"tipo": "mensagem", "de": de, "para": para, "texto": texto, "ts": ts})
                 for dest in (para, de):
                     if dest in clientes:

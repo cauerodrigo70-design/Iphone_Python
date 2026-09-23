@@ -166,6 +166,35 @@ body{display:flex;justify-content:center;align-items:center;overflow:hidden;
 .bubble-wrap.me .bubble{background:#007aff;color:#fff;border-bottom-right-radius:5px}
 .bubble-wrap.them .bubble{background:#e5e5ea;color:#000;border-bottom-left-radius:5px}
 .bubble-time{font-size:11px;color:#8e8e93;margin:2px 6px}
+.bubble-wrap.me .bubble{animation:popIn .18s cubic-bezier(.3,.7,.2,1)}
+@keyframes popIn{from{transform:scale(.85);opacity:0}to{transform:scale(1);opacity:1}}
+
+/* separador de hora */
+.time-sep{text-align:center;font-size:12px;color:#8e8e93;margin:10px 0;font-weight:500}
+
+/* digitando */
+.typing-wrap{display:flex;align-items:flex-start;margin:2px 0}
+.typing-bubble{background:#e5e5ea;border-radius:20px;border-bottom-left-radius:5px;
+  padding:12px 16px;display:flex;gap:5px;align-items:center}
+.typing-bubble span{width:7px;height:7px;border-radius:50%;background:#8e8e93;
+  animation:bounce .9s infinite}
+.typing-bubble span:nth-child(2){animation-delay:.15s}
+.typing-bubble span:nth-child(3){animation-delay:.3s}
+@keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)}}
+
+/* reação */
+.bubble-wrap{position:relative}
+.reaction-bar{position:absolute;background:#fff;border-radius:20px;
+  box-shadow:0 4px 20px rgba(0,0,0,.18);display:flex;gap:2px;padding:6px 10px;
+  z-index:50;bottom:calc(100% + 4px);opacity:0;pointer-events:none;
+  transform:scale(.8);transition:opacity .15s,transform .15s}
+.reaction-bar.show{opacity:1;pointer-events:auto;transform:scale(1)}
+.bubble-wrap.me .reaction-bar{right:0}
+.bubble-wrap.them .reaction-bar{left:0}
+.reaction-bar button{background:none;border:none;font-size:22px;cursor:pointer;
+  padding:2px 4px;border-radius:8px;transition:transform .1s}
+.reaction-bar button:active{transform:scale(1.3)}
+.bubble-reaction{font-size:16px;margin-top:2px}
 
 .chat-input-bar{display:flex;align-items:center;gap:8px;padding:10px 12px;
   border-top:1px solid #e5e5ea;background:#fff;flex:none}
@@ -318,7 +347,7 @@ body{display:flex;justify-content:center;align-items:center;overflow:hidden;
     <div class="hi" id="hi"></div>
   </div>
 </div>
-<div class="versao">v1</div>
+<div class="versao">v2</div>
 </body>
 </html>
 <script>
@@ -363,6 +392,7 @@ function conectarWS(){
     if(m.tipo==="mensagem") receberMsg(m);
     if(m.tipo==="historico") carregarHistorico(m.msgs);
     if(m.tipo==="verificar") resultadoVerificar(m);
+    if(m.tipo==="digitando") receberDigitando(m);
   };
   ws.onclose = () => setTimeout(conectarWS, 2000);
 }
@@ -518,19 +548,91 @@ $("btnChatBack").onclick=fecharChat;
 
 function carregarHistorico(msgs){
   $("chatMsgs").innerHTML="";
-  msgs.forEach(m=>adicionarBolha(m.de===meuCodigo?"me":"them", m.texto, m.ts));
+  let tsAnterior=0;
+  msgs.forEach(m=>{
+    if(m.ts-tsAnterior>300000) adicionarSeparador(m.ts);
+    adicionarBolha(m.de===meuCodigo?"me":"them", m.texto, m.ts);
+    tsAnterior=m.ts;
+  });
   scrollChat();
 }
 
-function adicionarBolha(lado, texto, ts){
+function adicionarSeparador(ts){
+  const d=new Date(ts);
+  const hoje=new Date(); hoje.setHours(0,0,0,0);
+  const ontem=new Date(hoje); ontem.setDate(ontem.getDate()-1);
+  let label;
+  if(d>=hoje) label=p2(d.getHours())+":"+p2(d.getMinutes());
+  else if(d>=ontem) label="Ontem "+p2(d.getHours())+":"+p2(d.getMinutes());
+  else label=p2(d.getDate())+"/"+p2(d.getMonth()+1)+" "+p2(d.getHours())+":"+p2(d.getMinutes());
+  const sep=document.createElement("div"); sep.className="time-sep"; sep.textContent=label;
+  $("chatMsgs").append(sep);
+}
+
+function adicionarBolha(lado, texto, ts, id){
   const wrap=document.createElement("div"); wrap.className=`bubble-wrap ${lado}`;
+  if(id) wrap.dataset.id=id;
   const d=new Date(ts);
   const hora=p2(d.getHours())+":"+p2(d.getMinutes());
-  wrap.innerHTML=`<div class="bubble">${escHtml(texto)}</div><span class="bubble-time">${hora}</span>`;
+  wrap.innerHTML=`<div class="bubble">${escHtml(texto)}</div><span class="bubble-time">${hora}</span><div class="reaction-bar"><button>❤️</button><button>👍</button><button>😂</button><button>😮</button><button>😢</button><button>👎</button></div><div class="bubble-reaction"></div>`;
+  // long press pra reação
+  let pressTimer;
+  const bolha=wrap.querySelector(".bubble");
+  const bar=wrap.querySelector(".reaction-bar");
+  bolha.addEventListener("pointerdown",()=>{ pressTimer=setTimeout(()=>bar.classList.add("show"),500); });
+  bolha.addEventListener("pointerup",()=>clearTimeout(pressTimer));
+  bolha.addEventListener("pointerleave",()=>clearTimeout(pressTimer));
+  document.addEventListener("pointerdown",e=>{ if(!wrap.contains(e.target)) bar.classList.remove("show"); },{passive:true});
+  wrap.querySelectorAll(".reaction-bar button").forEach(btn=>{
+    btn.onclick=()=>{
+      wrap.querySelector(".bubble-reaction").textContent=btn.textContent;
+      bar.classList.remove("show");
+    };
+  });
   $("chatMsgs").append(wrap);
 }
 
-function scrollChat(){ const m=$("chatMsgs"); m.scrollTop=m.scrollHeight; }
+// ── SOM DE ENVIO ─────────────────────────────────────────────────────────
+function somEnvio(){
+  try{
+    const ctx=new (window.AudioContext||window.webkitAudioContext)();
+    const o=ctx.createOscillator(), g=ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.frequency.setValueAtTime(1400,ctx.currentTime);
+    o.frequency.exponentialRampToValueAtTime(900,ctx.currentTime+0.12);
+    g.gain.setValueAtTime(0.18,ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.18);
+    o.start(); o.stop(ctx.currentTime+0.18);
+  }catch(e){}
+}
+
+// ── DIGITANDO ────────────────────────────────────────────────────────────
+let digitandoTimer=null;
+let estaDigitando=false;
+
+function enviarDigitando(ativo){
+  if(!chatAtual||!ws||ws.readyState!==1) return;
+  ws.send(JSON.stringify({tipo:"digitando", de:meuCodigo, para:chatAtual.codigo, ativo}));
+}
+
+$("chatInput").addEventListener("input",()=>{
+  if(!estaDigitando){ estaDigitando=true; enviarDigitando(true); }
+  clearTimeout(digitandoTimer);
+  digitandoTimer=setTimeout(()=>{ estaDigitando=false; enviarDigitando(false); },2000);
+});
+
+function receberDigitando(m){
+  if(!chatAtual||m.de!==chatAtual.codigo) return;
+  const existing=document.getElementById("typingBubble");
+  if(m.ativo){
+    if(existing) return;
+    const wrap=document.createElement("div"); wrap.className="typing-wrap"; wrap.id="typingBubble";
+    wrap.innerHTML=`<div class="typing-bubble"><span></span><span></span><span></span></div>`;
+    $("chatMsgs").append(wrap); scrollChat();
+  } else {
+    if(existing) existing.remove();
+  }
+}
 
 function escHtml(t){ return t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 
@@ -538,6 +640,8 @@ function enviarMsg(){
   const input=$("chatInput");
   const texto=input.value.trim(); if(!texto||!chatAtual) return;
   const ts=Date.now();
+  somEnvio();
+  clearTimeout(digitandoTimer); estaDigitando=false; enviarDigitando(false);
   ws.send(JSON.stringify({tipo:"mensagem", de:meuCodigo, para:chatAtual.codigo, texto, ts}));
   input.value="";
 }
