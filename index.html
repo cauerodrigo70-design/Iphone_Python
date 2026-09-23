@@ -186,6 +186,28 @@ body{display:flex;justify-content:center;align-items:center;overflow:hidden;
   width:140px;height:5px;border-radius:3px;background:#fff;z-index:70;
   cursor:pointer;box-shadow:0 0 0 10px transparent}
 .hi.dk{background:#111}
+
+/* ── BANNER DE NOTIFICAÇÃO (topo da tela, sempre visível) ── */
+.notif-banner{
+  position:absolute;top:12px;left:12px;right:12px;z-index:80;
+  border-radius:20px;padding:12px 14px;display:flex;gap:10px;align-items:center;
+  background:rgba(30,30,32,.92);
+  -webkit-backdrop-filter:blur(24px) saturate(160%);
+  backdrop-filter:blur(24px) saturate(160%);
+  border:1px solid rgba(255,255,255,.15);
+  cursor:pointer;
+  transform:translateY(-110%);opacity:0;
+  transition:transform .4s cubic-bezier(.3,.7,.2,1),opacity .3s;
+  box-shadow:0 8px 32px rgba(0,0,0,.4)}
+.notif-banner.show{transform:translateY(0);opacity:1}
+.notif-banner .nb-icon{
+  width:36px;height:36px;border-radius:9px;
+  background:linear-gradient(#5cf07a,#1fb844);
+  display:grid;place-items:center;flex:none}
+.notif-banner .nb-txt{flex:1;min-width:0}
+.notif-banner .nb-app{font-size:12px;font-weight:600;color:rgba(255,255,255,.6);margin-bottom:2px}
+.notif-banner .nb-msg{font-size:14px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.notif-banner small{font-size:12px;color:rgba(255,255,255,.5);align-self:flex-start;flex:none}
 </style>
 </head>
 <body>
@@ -277,6 +299,16 @@ body{display:flex;justify-content:center;align-items:center;overflow:hidden;
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- BANNER NOTIFICAÇÃO -->
+    <div class="notif-banner" id="notifBanner">
+      <div class="nb-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/></svg></div>
+      <div class="nb-txt">
+        <div class="nb-app">Mensagens</div>
+        <div class="nb-msg" id="notifBannerMsg"></div>
+      </div>
+      <small>agora</small>
     </div>
 
     <div class="hi" id="hi"></div>
@@ -509,30 +541,52 @@ $("chatInput").onkeydown=e=>{ if(e.key==="Enter") enviarMsg(); };
 
 function receberMsg(m){
   const outro = m.de===meuCodigo ? m.para : m.de;
-  const contato = contatos.find(c=>c.codigo===outro);
+  let contato = contatos.find(c=>c.codigo===outro);
+
+  // mensagem de desconhecido: cria contato automatico
+  if(!contato && m.de!==meuCodigo){
+    contato = {nome:"Desconhecido ("+m.de+")", codigo:m.de, ultimaMsg:""};
+    contatos.push(contato);
+  }
   if(contato){ contato.ultimaMsg=m.texto; salvarContatos(); }
 
   if(chatAtual && outro===chatAtual.codigo){
     adicionarBolha(m.de===meuCodigo?"me":"them", m.texto, m.ts);
     scrollChat();
   } else if(m.de!==meuCodigo){
-    // notificação
     naoLidas[m.de]=(naoLidas[m.de]||0)+1; salvarNaoLidas();
     const nome=contato?contato.nome:m.de;
-    mostrarNotificacao(nome, m.texto);
+    mostrarNotificacao(nome, m.texto, m.de);
   }
 }
 
 // ── NOTIFICAÇÃO ───────────────────────────────────────────────────────────
 let notifTimer=null;
-function mostrarNotificacao(nome, texto){
-  const n=$("lockNotif");
-  $("lockNotifText").textContent=`${nome}: ${texto}`;
-  $("lockNotifTime").textContent="agora";
-  n.style.display="flex";
+let notifDe=null;
+function mostrarNotificacao(nome, texto, de){
+  notifDe=de;
+  // banner no topo (visivel em qualquer tela)
+  $("notifBannerMsg").textContent=nome+": "+texto;
+  $("notifBanner").classList.add("show");
   if(notifTimer) clearTimeout(notifTimer);
-  notifTimer=setTimeout(()=>n.style.display="none", 5000);
+  notifTimer=setTimeout(()=>$("notifBanner").classList.remove("show"), 5000);
+  // notif tela de bloqueio
+  $("lockNotifText").textContent=nome+": "+texto;
+  $("lockNotifTime").textContent="agora";
+  $("lockNotif").style.display="flex";
+  setTimeout(()=>$("lockNotif").style.display="none", 5000);
 }
+
+// clicar no banner abre o app de mensagens na conversa certa
+$("notifBanner").onclick=()=>{
+  $("notifBanner").classList.remove("show");
+  if(!S.classList.contains("unlocked")) S.classList.add("unlocked");
+  if(!S.classList.contains("inapp")) abrirMensagens();
+  if(notifDe){
+    const c=contatos.find(x=>x.codigo===notifDe);
+    if(c) setTimeout(()=>abrirChat(c), 450);
+  }
+};
 
 // ── NAVEGAÇÃO ─────────────────────────────────────────────────────────────
 function cima(){
