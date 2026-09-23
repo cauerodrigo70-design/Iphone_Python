@@ -79,6 +79,11 @@ async def ws_handler(ws: WebSocketServerProtocol):
                 h = historico(m["eu"], m["outro"])
                 await ws.send(json.dumps({"tipo": "historico", "msgs": h}))
 
+            elif t == "lido":
+                dest = m.get("para")
+                if dest and dest in clientes:
+                    await clientes[dest].send(json.dumps({"tipo": "lido", "de": m["de"]}))
+
             elif t == "digitando":
                 dest = m.get("para")
                 if dest and dest in clientes:
