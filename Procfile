@@ -1,1 +1,1 @@
-web: python iphone.py
+web: python server.py
